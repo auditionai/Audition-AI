@@ -8,6 +8,9 @@ export type GenerationProviderRouteKey =
   | 'image_group_7'
   | 'image_group_8'
   | 'image_prompt'
+  | 'magic_editor_pro'
+  | 'remove_bg_pro'
+  | 'sharpen_upscale'
   | 'video_generation'
   | 'motion_control';
 
@@ -25,6 +28,9 @@ export const GENERATION_PROVIDER_ROUTE_OPTIONS: Array<{
   { key: 'image_group_7', label: 'Tạo ảnh nhóm 7', description: 'Bảy nhân vật; dùng nguồn đã cấu hình.' },
   { key: 'image_group_8', label: 'Tạo ảnh nhóm 8', description: 'Tám nhân vật, không dùng ảnh mẫu; dùng nguồn đã cấu hình.' },
   { key: 'image_prompt', label: 'Tạo ảnh bằng prompt', description: 'Công cụ tạo ảnh prompt độc lập.' },
+  { key: 'magic_editor_pro', label: 'Chỉnh sửa ảnh', description: 'Chỉnh sửa ảnh theo prompt, giữ nguyên nhân vật và chi tiết.' },
+  { key: 'remove_bg_pro', label: 'Tách nền', description: 'Tách chủ thể khỏi phông nền, giữ biên viền và chi tiết.' },
+  { key: 'sharpen_upscale', label: 'Làm nét / nâng cấp', description: 'Khôi phục chi tiết, khử nhiễu và nâng cấp ảnh.' },
   { key: 'video_generation', label: 'Tạo video', description: 'Các model text/image-to-video.' },
   { key: 'motion_control', label: 'Motion Control', description: 'Điều khiển chuyển động bằng video mẫu.' },
 ];
@@ -39,6 +45,9 @@ export const DEFAULT_PROVIDER_BY_FEATURE: Partial<Record<GenerationProviderRoute
   image_group_7: 'gpti2',
   image_group_8: 'gpti2',
   image_prompt: 'gpti2',
+  magic_editor_pro: 'gpti2',
+  remove_bg_pro: 'gpti2',
+  sharpen_upscale: 'gpti2',
   video_generation: 'tst',
   motion_control: 'tst',
 };
@@ -47,6 +56,9 @@ export const DEFAULT_ALLOWED_MODELS_BY_FEATURE: Partial<Record<GenerationProvide
   image_group_6: ['image-gpt-2'],
   image_group_7: ['image-gpt-2'],
   image_group_8: ['image-gpt-2'],
+  magic_editor_pro: ['gpt-image-2'],
+  remove_bg_pro: ['gpt-image-2'],
+  sharpen_upscale: ['gpt-image-2'],
 };
 
 export const GPTI2_IMAGE_MODELS = ['image-gpt-2', 'gpt-image-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'];
@@ -103,6 +115,11 @@ export const inferGenerationProviderRouteKey = (input: {
     ? payload.__recipePayload as Record<string, unknown>
     : payload;
   const recipeType = normalize(recipe.recipeType);
+  const toolId = normalize(input.toolId);
+  if (toolId === 'magic_editor_pro' || toolId === 'remove_bg_pro' || toolId === 'sharpen_upscale') {
+    return toolId as GenerationProviderRouteKey;
+  }
+  if (queueKind === 'image_edit_direct' || recipeType === 'image_edit_recipe_v1') return null;
   if (queueKind === 'motion_generate' || recipeType === 'motion_generate_recipe_v1') return 'motion_control';
   if (queueKind === 'video_generate' || recipeType === 'video_generate_recipe_v1') return 'video_generation';
   if (recipeType === 'prompt_image_generate_recipe_v1') return 'image_prompt';
@@ -110,7 +127,6 @@ export const inferGenerationProviderRouteKey = (input: {
 
   const explicitCount = Math.floor(Number(recipe.characterCount || 0));
   if (explicitCount > 0) return getImageProviderRouteKey(explicitCount);
-  const toolId = normalize(input.toolId);
   if (toolId.includes('couple')) return 'image_couple';
   const groupMatch = toolId.match(/group[_-]?(\d+)/);
   if (groupMatch) return getImageProviderRouteKey(Number(groupMatch[1]));

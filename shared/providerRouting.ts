@@ -82,10 +82,11 @@ export const getAllowedModelsForFeature = (
 ): string[] | null => {
   if (!featureKey) return null;
   const explicit = config?.allowedModelsByFeature?.[featureKey];
-  if (Array.isArray(explicit) && explicit.some((modelId) => normalize(modelId) === '*')) return null;
-  const source = Array.isArray(explicit) && explicit.length > 0
-    ? explicit
-    : DEFAULT_ALLOWED_MODELS_BY_FEATURE[featureKey];
+  if (Array.isArray(explicit)) {
+    if (explicit.some((modelId) => normalize(modelId) === '*')) return null;
+    return Array.from(new Set(explicit.map(canonicalGenerationModelId).filter(Boolean)));
+  }
+  const source = DEFAULT_ALLOWED_MODELS_BY_FEATURE[featureKey];
   if (!source?.length) return null;
   return Array.from(new Set(source.map(canonicalGenerationModelId).filter(Boolean)));
 };

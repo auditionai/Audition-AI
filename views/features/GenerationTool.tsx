@@ -1848,7 +1848,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
                     <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider">Mô hình AI Engine</label>
                         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                            {IMAGE_MODEL_OPTIONS.map((model) => {
+                            {IMAGE_MODEL_OPTIONS.filter((model) => imageModelAvailability[model.tier]).map((model) => {
                                 const Icon = model.icon;
                                 const available = imageModelAvailability[model.tier];
                                 const selected = aiModel === model.tier;

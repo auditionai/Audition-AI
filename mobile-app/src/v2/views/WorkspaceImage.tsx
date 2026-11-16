@@ -1296,7 +1296,7 @@ export function WorkspaceImage() {
         <div className="space-y-2">
           <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1">Model AI</h3>
           <div className="grid gap-3 sm:grid-cols-2">
-            {IMAGE_MODEL_OPTIONS.map((model) => {
+            {IMAGE_MODEL_OPTIONS.filter((model) => imageModelAvailability[model.tier]).map((model) => {
               const Icon = model.icon;
               const available = imageModelAvailability[model.tier];
               const selected = aiModel === model.tier;

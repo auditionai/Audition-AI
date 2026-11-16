@@ -3138,7 +3138,7 @@ export const getGenerationProviderConfig = async (): Promise<GenerationProviderC
                             .filter(Boolean),
                     )),
                 ])
-                .filter(([featureKey, modelIds]) => Boolean(featureKey && (modelIds as string[]).length)),
+                .filter(([featureKey]) => Boolean(featureKey)),
         ) as Record<string, string[]>;
         const normalizePriority = (value: unknown) => Array.from(new Set((Array.isArray(value) ? value : []).map((provider) => provider === 'gommo' || provider === 'gpti2' || provider === 'tst' ? provider : null).filter(Boolean))) as GenerationProviderMode[];
         const providerPriorityByFeature = Object.fromEntries(Object.entries(data?.value?.providerPriorityByFeature || {}).map(([key, value]) => [String(key).trim().toLowerCase(), normalizePriority(value)]).filter(([, value]) => (value as GenerationProviderMode[]).length)) as Record<string, GenerationProviderMode[]>;
@@ -3202,7 +3202,7 @@ export const saveGenerationProviderConfig = async (
                             .filter(Boolean),
                     )),
                 ])
-                .filter(([featureKey, modelIds]) => Boolean(featureKey && (modelIds as string[]).length)),
+                .filter(([featureKey]) => Boolean(featureKey)),
         ) as Record<string, string[]>;
         const normalizeDefaultModelId = canonicalGenerationModelId;
         const defaultModelByFeature = Object.fromEntries(Object.entries(input.defaultModelByFeature || {}).map(([key, value]) => [

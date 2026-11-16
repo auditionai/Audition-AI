@@ -168,8 +168,8 @@ const TST_DOCS_IMAGE_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
   'image-gpt-2': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'],
   'image-gpt-2.5-flare': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
   'image-gpt-2.5-sunburst': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
-  'image-gpt-2.6-flare': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '2.35:1'],
-  'image-gpt-2.6-sunburst': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '2.35:1'],
+  'image-gpt-2.6-flare': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
+  'image-gpt-2.6-sunburst': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
   'nano-banana-2': ['auto', '1:1', '4:3', '16:9', '9:16'],
   'nano-banana-pro': ['auto', '1:1', '4:3', '16:9', '21:9', '9:16', '3:4'],
 };
@@ -215,6 +215,15 @@ const sortByOrder = (values: string[], order: string[]) =>
 const unique = (values: string[]) => Array.from(new Set(values.filter(Boolean)));
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const normalizeModelId = (value: string) => value.trim().toLowerCase();
+const normalizeTstCatalogModelId = (value: string) => {
+  const modelId = normalizeModelId(value);
+  return ({
+    'gpt-image-2.5-flare': 'image-gpt-2.5-flare',
+    'gpt-image-2.5-sunburst': 'image-gpt-2.5-sunburst',
+    'gpt-image-2.6-flare': 'image-gpt-2.6-flare',
+    'gpt-image-2.6-sunburst': 'image-gpt-2.6-sunburst',
+  } as Record<string, string>)[modelId] || modelId;
+};
 const normalizeServer = (value?: string) => (value || 'fast').trim().toLowerCase();
 const normalizeSpeed = (value?: string) => (value || 'fast').trim().toLowerCase();
 const normalizeResolution = (value?: string) => (value || 'default').trim().toLowerCase();
@@ -988,7 +997,7 @@ const matchesVideoDurationForModel = (modelId: string, entryDuration?: string, r
 };
 
 const mapPricingEntry = (entry: any): TstPricingEntry => {
-  const model = String(entry.model || '');
+  const model = normalizeTstCatalogModelId(String(entry.model || ''));
   // `key` is the current TST contract; `config_key` is only a temporary alias.
   const configKey = String(entry.key || entry.config_key || '');
   let resolution = entry.resolution ? String(entry.resolution) : undefined;
@@ -997,7 +1006,7 @@ const mapPricingEntry = (entry: any): TstPricingEntry => {
   let duration = entry.duration ? String(entry.duration) : undefined;
   let audio = entry.audio === true;
 
-  if (normalizeModelId(model) === 'image-gpt-2') {
+  if (normalizeModelId(model).startsWith('image-gpt-2')) {
     const parsed = parseGptImage2ConfigKey(configKey);
     if (parsed.resolution) {
       resolution = parsed.resolution;
@@ -1033,7 +1042,7 @@ const mapPricingEntry = (entry: any): TstPricingEntry => {
 };
 
 const mapRuntimeModel = (entry: any): TstRuntimeModel => ({
-  model: String(entry.model || ''),
+  model: normalizeTstCatalogModelId(String(entry.model || '')),
   name: String(entry.name || entry.model || ''),
   type: String(entry.type || ''),
   description: entry.description ? String(entry.description) : '',
@@ -1072,7 +1081,7 @@ const getMatchingEntries = ({
 
   return getPricingEntriesForModel(modelId, pricingEntries).filter((entry) => {
     const isGptFastGenericEntry =
-      normalizedModelId === 'image-gpt-2' &&
+      normalizedModelId.startsWith('image-gpt-2') &&
       normalizeServer(entry.server) === 'fast' &&
       normalizeCatalogResolution(entry.resolution) === '' &&
       normalizeQuality(entry.quality) === '' &&

@@ -79,8 +79,8 @@ type Stage = 'input' | 'processing' | 'result';
 type Resolution = string;
 const GPTI2_IMAGE_RESOLUTIONS = ['1K', '2K', '4K'];
 const GPTI2_NANO_RESOLUTIONS = ['1K', '2K', '4K'];
-const GPTI2_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'];
-const GPTI2_NANO_ASPECT_RATIOS = GPTI2_ASPECT_RATIOS.filter((ratio) => ratio !== '21:9');
+const GPTI2_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '2.35:1'];
+const GPTI2_NANO_ASPECT_RATIOS = GPTI2_ASPECT_RATIOS.filter((ratio) => ratio !== '2.35:1');
 
 const IMAGE_MODEL_OPTIONS: Array<{
   tier: TstGenerationTier;
@@ -105,6 +105,12 @@ const IMAGE_MODEL_OPTIONS: Array<{
   },
   {
     tier: 'gpt_sunburst', label: 'Sunburst', tag: 'MỚI', title: 'GPT Image 2.5 Sunburst', description: 'Dựng nhân vật 3D giàu chi tiết với chất liệu, gương mặt và ánh sáng điện ảnh nổi bật.', icon: Sparkles, accent: 'from-yellow-300 via-orange-500 to-red-500',
+  },
+  {
+    tier: 'gpt_26_flare', label: 'Flare 2.6', tag: 'MỚI', title: 'GPT Image 2.6 Flare', description: 'Bản mới nhanh nhất, bám sát mô tả và giữ chi tiết tốt hơn.', icon: Sparkles, accent: 'from-emerald-400 via-cyan-500 to-blue-500',
+  },
+  {
+    tier: 'gpt_26_sunburst', label: 'Sunburst 2.6', tag: 'MỚI', title: 'GPT Image 2.6 Sunburst', description: 'Bản 2.6 giàu ánh sáng và chi tiết cho hình ảnh nổi bật.', icon: Sparkles, accent: 'from-amber-300 via-pink-500 to-rose-600',
   },
   {
     tier: 'flash',
@@ -351,7 +357,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
   const generationSpeedId = uiSpeedToTst(speed) || 'fast';
   const generationTier = aiModel;
-  const isGptImageTier = ['gpt', 'gpt_flare', 'gpt_sunburst'].includes(aiModel);
+  const isGptImageTier = ['gpt', 'gpt_flare', 'gpt_sunburst', 'gpt_26_flare', 'gpt_26_sunburst'].includes(aiModel);
   const selectedModelId = getGenerationModelId(aiModel);
   const selectedProvider = resolveProviderForModel(providerConfig, selectedModelId, providerRouteKey);
   const generationServerId = selectedProvider === 'gpti2' ? GPTI2_SERVER_ID : uiServerToTst(server) || 'fast';
@@ -496,7 +502,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
           return isGommoCatalogModelAvailable(getGommoModelForAudition(gommoCatalog, modelId));
       }
       if (resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gpti2') {
-          return ['image-gpt-2', 'gpt-image-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId);
+          return ['image-gpt-2', 'gpt-image-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'image-gpt-2.6-flare', 'image-gpt-2.6-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId);
       }
       return pricingEntries.some((entry) => entry.model.trim().toLowerCase() === modelId)
           && runtimeImageModelIds.has(modelId);
@@ -510,6 +516,8 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
     gpt: isGptAvailable,
     gpt_flare: isTierAvailable('gpt_flare'),
     gpt_sunburst: isTierAvailable('gpt_sunburst'),
+    gpt_26_flare: isTierAvailable('gpt_26_flare'),
+    gpt_26_sunburst: isTierAvailable('gpt_26_sunburst'),
   };
   const isCatalogReady = (!catalogLoading || isGpti2Selected) && (
       isGommoSelected
@@ -1073,7 +1081,7 @@ export const GenerationTool: React.FC<GenerationToolProps> = ({ feature, lang, o
 
     const styleMetadata = availableStyles.find((style: any) => style.image_url === activeStylePreset);
     const styleDirectivePrompt = buildAuditionKoreaMmoStylePrompt(styleMetadata?.trigger_prompt || styleMetadata?.name || null);
-    const referenceLockPrompt = aiModel === 'gpt_flare' || aiModel === 'gpt_sunburst' ? GPT_IMAGE_25_REFERENCE_LOCK_PROMPT : '';
+    const referenceLockPrompt = ['gpt_flare', 'gpt_sunburst', 'gpt_26_flare', 'gpt_26_sunburst'].includes(aiModel) ? GPT_IMAGE_25_REFERENCE_LOCK_PROMPT : '';
     const basePrompt = `${referenceLockPrompt} ${activeFeature.defaultPrompt || ''}${prompt}`.trim();
     const requestedSpeedId = uiSpeedToTst(speed) || 'fast';
     const requestedServerId = isGpti2Selected ? GPTI2_SERVER_ID : uiServerToTst(server) || 'fast';

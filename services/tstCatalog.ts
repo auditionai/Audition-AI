@@ -1,6 +1,6 @@
 import modelsMarkdown from '../models.md?raw';
 
-export type TstGenerationTier = 'flash' | 'pro' | 'gpt' | 'gpt_flare' | 'gpt_sunburst';
+export type TstGenerationTier = 'flash' | 'pro' | 'gpt' | 'gpt_flare' | 'gpt_sunburst' | 'gpt_26_flare' | 'gpt_26_sunburst';
 export type TstGenerationSpeed = 'fast' | 'slow';
 // Resolution is provider-defined and must stay open-ended. TST/Gommo can add
 // values without an AUDITION deployment (for example 8K/10K/12K).
@@ -155,7 +155,7 @@ const SPEED_ORDER = ['fast', 'slow'];
 const RESOLUTION_ORDER = ['default', '480p', '720p', '1080p', '1k', '2k', '4k', '4k_upscale', '8k', '10k', '12k'];
 const GPT_IMAGE_QUALITY_VALUES = ['low', 'medium', 'high'];
 const DURATION_ORDER = ['3s', '4s', '5s', '6s', '7s', '8s', '9s', '10s', '11s', '12s', '13s', '14s', '15s', '25s'];
-const ASPECT_RATIO_ORDER = ['auto', '1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '5:4', '4:5', '21:9'];
+const ASPECT_RATIO_ORDER = ['auto', '1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '5:4', '4:5', '2.35:1', '21:9'];
 const TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
   'seedance-2.0-fast': ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'],
   'seedance-2.0': ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'],
@@ -168,6 +168,8 @@ const TST_DOCS_IMAGE_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
   'image-gpt-2': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'],
   'image-gpt-2.5-flare': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
   'image-gpt-2.5-sunburst': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
+  'image-gpt-2.6-flare': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '2.35:1'],
+  'image-gpt-2.6-sunburst': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '2.35:1'],
   'nano-banana-2': ['auto', '1:1', '4:3', '16:9', '9:16'],
   'nano-banana-pro': ['auto', '1:1', '4:3', '16:9', '21:9', '9:16', '3:4'],
 };
@@ -179,6 +181,8 @@ const tierToModelId: Record<TstGenerationTier, string> = {
   gpt: 'image-gpt-2',
   gpt_flare: 'image-gpt-2.5-flare',
   gpt_sunburst: 'image-gpt-2.5-sunburst',
+  gpt_26_flare: 'image-gpt-2.6-flare',
+  gpt_26_sunburst: 'image-gpt-2.6-sunburst',
 };
 
 const uiServerMap: Record<string, string> = {
@@ -370,6 +374,8 @@ export const ADMIN_MANAGED_MODEL_LABELS = [
   'GPT Image 2',
   'GPT Image 2.5 Flare',
   'GPT Image 2.5 Sunburst',
+  'GPT Image 2.6 Flare',
+  'GPT Image 2.6 Sunburst',
   'Kling 2.5 Turbo',
   'Kling 2.6',
   'Kling 3.0',
@@ -400,6 +406,10 @@ const ADMIN_MANAGED_MODEL_IDS = [
   'image-gpt-2.5-sunburst',
   'gpt-image-2.5-flare',
   'gpt-image-2.5-sunburst',
+  'image-gpt-2.6-flare',
+  'image-gpt-2.6-sunburst',
+  'gpt-image-2.6-flare',
+  'gpt-image-2.6-sunburst',
   'kling-2.5-turbo',
   'kling-2.6',
   'kling-3.0-video',
@@ -558,20 +568,23 @@ export const sanitizePricingEntriesWithRuntimeModels = (
   runtimeModels: TstRuntimeModel[] = [],
   serverAvailabilityConfig?: TstServerAvailabilityConfig | null,
 ) => {
-  // GPTi2 2.5 models use the same option matrix as GPT Image 2. The live
-  // catalog can omit their model records, so expose mirrored rows everywhere
-  // pricing is consumed (not only in the Admin table).
-  const gpt25Ids = ['image-gpt-2.5-flare', 'image-gpt-2.5-sunburst'];
+  // GPTi2 can omit model records from the live catalog. Expose a complete
+  // option matrix for every supported GPT Image variant; model-specific Admin
+  // prices still take precedence during billing.
+  const gptImageVariantIds = ['image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'image-gpt-2.6-flare', 'image-gpt-2.6-sunburst'];
   const baseGptRows = pricingEntries.filter((entry) => normalizeModelId(entry.model) === 'image-gpt-2');
-  const mirroredRows = baseGptRows.flatMap((entry) => gpt25Ids.map((model) => ({ ...entry, model })));
+  const mirroredRows = baseGptRows.flatMap((entry) => gptImageVariantIds.map((model) => ({ ...entry, model })));
   const effectivePricingEntries = [...pricingEntries, ...mirroredRows];
   const effectiveRuntimeModels = [
     ...runtimeModels,
-    ...gpt25Ids
+    ...gptImageVariantIds
       .filter((model) => !runtimeModels.some((entry) => normalizeModelId(entry.model) === model))
       .map((model) => ({
         model,
-        name: model === 'image-gpt-2.5-flare' ? 'GPT Image 2.5 Flare' : 'GPT Image 2.5 Sunburst',
+        name: model === 'image-gpt-2.5-flare' ? 'GPT Image 2.5 Flare'
+          : model === 'image-gpt-2.5-sunburst' ? 'GPT Image 2.5 Sunburst'
+            : model === 'image-gpt-2.6-flare' ? 'GPT Image 2.6 Flare'
+              : 'GPT Image 2.6 Sunburst',
         type: 'image',
         servers: ['fast'],
         capabilities: { resolutions: ['1K', '2K', '4K'], qualities: ['low', 'medium', 'high'] },
@@ -805,6 +818,8 @@ const getFallbackImageSpec = (tier: TstGenerationTier): TstImageModelSpec => {
     tier === 'pro' ? 'Nano Banana PRO' :
     tier === 'gpt_flare' ? 'GPT Image 2.5 Flare' :
     tier === 'gpt_sunburst' ? 'GPT Image 2.5 Sunburst' :
+    tier === 'gpt_26_flare' ? 'GPT Image 2.6 Flare' :
+    tier === 'gpt_26_sunburst' ? 'GPT Image 2.6 Sunburst' :
     'GPT Image 2';
   return {
     modelId,
@@ -1998,7 +2013,7 @@ export const getPricingRows = async (forceRefresh = false): Promise<TstPricingRo
   const pricingEntries = sanitizePricingEntriesWithRuntimeModels(rawPricingEntries, runtimeModels);
   const modelMap = new Map([
     ...runtimeModels,
-    ...['image-gpt-2.5-flare', 'image-gpt-2.5-sunburst'].map((model) => ({ model, name: model, type: 'image', servers: ['fast'] } as TstRuntimeModel)),
+    ...['image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'image-gpt-2.6-flare', 'image-gpt-2.6-sunburst'].map((model) => ({ model, name: model, type: 'image', servers: ['fast'] } as TstRuntimeModel)),
   ].map((model) => [normalizeModelId(model.model), model]));
   const rows: Array<TstPricingRow | null> = pricingEntries.map((entry) => {
     const model = modelMap.get(normalizeModelId(entry.model));

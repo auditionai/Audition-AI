@@ -389,7 +389,7 @@ const findPricingMatch = (
   },
 ) => entries.find((entry) => {
   const isGptFastGenericEntry =
-    ['image-gpt-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst'].includes(normalize(modelId)) &&
+    ['image-gpt-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'image-gpt-2.6-flare', 'image-gpt-2.6-sunburst'].includes(normalize(modelId)) &&
     normalizeServer(entry.server) === 'fast' &&
     !normalizeResolution(entry.resolution) &&
     !normalizeQuality(entry.quality) &&

@@ -15,6 +15,8 @@ All models available via the API. Credits are deducted per generation.
 | `image-gpt-2` | GPT Image 2 | vip1, vip2, fast | 1k, 2k, 4k | fast | 8-40 |
 | `gpt-image-2.5-flare` | GPT Image 2.5 Flare | gpti2 | 1k, 2k, 4k | fast | 8-40 |
 | `gpt-image-2.5-sunburst` | GPT Image 2.5 Sunburst | gpti2 | 1k, 2k, 4k | fast | 8-40 |
+| `gpt-image-2.6-flare` | GPT Image 2.6 Flare | gpti2 | 1k, 2k, 4k | fast | 8-40 |
+| `gpt-image-2.6-sunburst` | GPT Image 2.6 Sunburst | gpti2 | 1k, 2k, 4k | fast | 8-40 |
 | `imagen-4` | Imagen 4 | fast | default | fast | 20 |
 | `imagen-4-fast` | Imagen 4 Fast | fast | default | fast | 20 |
 | `imagen-4-ultra` | Imagen 4 Ultra | fast | default | fast | 30 |

@@ -1080,7 +1080,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
   }, [gommoCatalog]);
 
   const isGpti2ModelId = (modelId: string) =>
-      ['image-gpt-2', 'gpt-image-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId.trim().toLowerCase());
+      ['image-gpt-2', 'gpt-image-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'image-gpt-2.6-flare', 'image-gpt-2.6-sunburst', 'gpt-image-2.6-flare', 'gpt-image-2.6-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId.trim().toLowerCase());
 
   const allPricingRows = useMemo(() => {
       const union = new Map<string, TstPricingRow>();
@@ -1146,6 +1146,8 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
               models.set('gpt-image-2', 'GPTi2 · GPT Image 2');
               models.set('gpt-image-2.5-flare', 'GPT · GPT Image 2.5 Flare');
               models.set('gpt-image-2.5-sunburst', 'GPT · GPT Image 2.5 Sunburst');
+              models.set('gpt-image-2.6-flare', 'GPT · GPT Image 2.6 Flare');
+              models.set('gpt-image-2.6-sunburst', 'GPT · GPT Image 2.6 Sunburst');
               models.set('nano-banana-2', 'GPTi2 · Nano Banana 2');
               models.set('nano-banana-pro', 'GPTi2 · Nano Banana Pro');
           }
@@ -4805,7 +4807,7 @@ export const Admin: React.FC<AdminProps> = ({ lang, isAdmin = false }) => {
                                const usesDefaultModels = !explicitModels;
                                const allowsAllModels = explicitModels?.includes('*') || (!explicitModels && !DEFAULT_ALLOWED_MODELS_BY_FEATURE[route.key]);
                                const providerModelOptions = modelOptions.filter((model) => effectiveProvider === 'gpti2'
-                                   ? ['gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(model.id)
+                                   ? ['gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'gpt-image-2.6-flare', 'gpt-image-2.6-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(model.id)
                                    : effectiveProvider === 'tst'
                                    ? pricingRows.some((row) => row.modelId.trim().toLowerCase() === model.id)
                                    : gommoCatalog?.models.some((entry) =>

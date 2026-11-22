@@ -61,13 +61,15 @@ export const DEFAULT_ALLOWED_MODELS_BY_FEATURE: Partial<Record<GenerationProvide
   sharpen_upscale: ['gpt-image-2'],
 };
 
-export const GPTI2_IMAGE_MODELS = ['image-gpt-2', 'gpt-image-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'];
+export const GPTI2_IMAGE_MODELS = ['image-gpt-2', 'gpt-image-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'image-gpt-2.6-flare', 'image-gpt-2.6-sunburst', 'gpt-image-2.6-flare', 'gpt-image-2.6-sunburst', 'nano-banana-2', 'nano-banana-pro'];
 
 /** Stable model key shared by Admin/UI; providers translate this to their own slug. */
 export const canonicalGenerationModelId = (value: unknown) => {
   const modelId = String(value || '').trim().toLowerCase();
   if (modelId === 'image-gpt-2.5-flare' || modelId === 'gpt-image-2.5-flare') return 'gpt-image-2.5-flare';
   if (modelId === 'image-gpt-2.5-sunburst' || modelId === 'gpt-image-2.5-sunburst') return 'gpt-image-2.5-sunburst';
+  if (modelId === 'image-gpt-2.6-flare' || modelId === 'gpt-image-2.6-flare') return 'gpt-image-2.6-flare';
+  if (modelId === 'image-gpt-2.6-sunburst' || modelId === 'gpt-image-2.6-sunburst') return 'gpt-image-2.6-sunburst';
   return modelId;
 };
 export const VEO3_VIDEO_MODELS = ['veo3.1-fast', 'veo3.1-lite', 'veo3.1-omni', 'veo3.1-quality'];
@@ -80,10 +82,11 @@ export const getAllowedModelsForFeature = (
 ): string[] | null => {
   if (!featureKey) return null;
   const explicit = config?.allowedModelsByFeature?.[featureKey];
-  if (Array.isArray(explicit) && explicit.some((modelId) => normalize(modelId) === '*')) return null;
-  const source = Array.isArray(explicit) && explicit.length > 0
-    ? explicit
-    : DEFAULT_ALLOWED_MODELS_BY_FEATURE[featureKey];
+  if (Array.isArray(explicit)) {
+    if (explicit.some((modelId) => normalize(modelId) === '*')) return null;
+    return Array.from(new Set(explicit.map(canonicalGenerationModelId).filter(Boolean)));
+  }
+  const source = DEFAULT_ALLOWED_MODELS_BY_FEATURE[featureKey];
   if (!source?.length) return null;
   return Array.from(new Set(source.map(canonicalGenerationModelId).filter(Boolean)));
 };

@@ -2,13 +2,13 @@
 import sharp from 'sharp';
 
 const GPTI2_BASE = 'https://gpti2.store/v1';
-// GPT Image 2.5 is synchronous and Sunburst is explicitly the slower model.
+// GPT Image 2.5/2.6 are synchronous and Sunburst is explicitly the slower model.
 // Keep the full provider window; retrying a timed-out synchronous request is
 // unsafe because the provider may have accepted it before the response was lost.
 const GPTI2_TIMEOUT_MS = 295_000;
 const GPTI2_REFERENCE_TIMEOUT_MS = 30_000;
 const MODEL_ALIASES: Record<string, string> = { 'image-gpt-2': 'gpt-image-2' };
-const ALLOWED_MODELS = new Set(['gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro']);
+const ALLOWED_MODELS = new Set(['gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'gpt-image-2.6-flare', 'gpt-image-2.6-sunburst', 'nano-banana-2', 'nano-banana-pro']);
 const NANO_ASPECT_RATIOS = new Set(['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3']);
 const MAX_NANO_REFERENCE_IMAGES = 8;
 const NANO_OUTPUT_RESOLUTION = '2K';
@@ -54,7 +54,7 @@ const recipe = (payload: Record<string, unknown>) =>
 const modelOf = (payload: Record<string, unknown>) => {
   const requestedModel = normalize(payload.model || payload.modelId || recipe(payload).model || recipe(payload).modelId);
   const model = MODEL_ALIASES[requestedModel]
-    || ({ 'image-gpt-2.5-flare': 'gpt-image-2.5-flare', 'image-gpt-2.5-sunburst': 'gpt-image-2.5-sunburst' } as Record<string, string>)[requestedModel]
+    || ({ 'image-gpt-2.5-flare': 'gpt-image-2.5-flare', 'image-gpt-2.5-sunburst': 'gpt-image-2.5-sunburst', 'image-gpt-2.6-flare': 'gpt-image-2.6-flare', 'image-gpt-2.6-sunburst': 'gpt-image-2.6-sunburst' } as Record<string, string>)[requestedModel]
     || requestedModel;
   if (!ALLOWED_MODELS.has(model)) throw new Error(`GPTI2_MODEL_UNSUPPORTED: ${model || '(empty)'}`);
   return model;

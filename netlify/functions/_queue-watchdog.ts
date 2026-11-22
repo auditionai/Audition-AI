@@ -130,7 +130,7 @@ const getStage = (payload: unknown) => {
 
 const isGpti2Job = (row: any) =>
   String(row?.provider || toPayloadObject(row?.queue_payload).__targetProvider || '').trim().toLowerCase() === 'gpti2'
-  || ['gpt-image-2', 'image-gpt-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro']
+  || ['gpt-image-2', 'image-gpt-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'gpt-image-2.6-flare', 'gpt-image-2.6-sunburst', 'nano-banana-2', 'nano-banana-pro']
     .includes(String(toPayloadObject(row?.queue_payload).modelId || toPayloadObject(row?.queue_payload).model || '').trim().toLowerCase());
 
 const isStaleGpti2SyncDispatch = (row: any, now: number) => {

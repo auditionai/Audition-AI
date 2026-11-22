@@ -8,7 +8,6 @@ import {
   normalizeSePayOrderStatus,
   retrieveSePayOrder,
 } from './_sepay';
-import { sendTelegramOperationalAlert } from './_telegram-notify';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -42,7 +41,7 @@ export const runSePayPendingReconcile = async (options: SePayPendingReconcileOpt
   const { data: transactions, error: listError } = await admin
     .from('payment_transactions')
     .select('id, user_id, amount_vnd, order_code, provider_order_code, status, payment_method, provider_payment_link_id, provider_payload, created_at')
-    .in('status', ['pending', 'cancelled', 'failed'])
+    .eq('status', 'pending')
     .or('payment_method.eq.sepay,provider_payment_link_id.like.sepay:%')
     .gte('created_at', recentWindowStart)
     .lte('created_at', staleBefore)
@@ -218,26 +217,6 @@ export const runSePayPendingReconcile = async (options: SePayPendingReconcileOpt
       'runtime_budget_exhausted',
     ].includes(reason);
   }).length;
-
-  if (pendingOlderThanFiveMinutes > 0 || failed > 0 || criticalFailureCount > 0) {
-    await sendTelegramOperationalAlert(
-      'SePay reconcile can chu y',
-      {
-        checked: transactions?.length || 0,
-        settled,
-        failed,
-        failedReasonCounts,
-        budgetExhausted,
-        criticalFailureCount,
-        pendingOlderThanFiveMinutes,
-      },
-      {
-        alertKey: 'sepay_reconcile:attention',
-        cooldownMs: criticalFailureCount > 0 || pendingOlderThanFiveMinutes > 0 ? 30 * 60 * 1000 : 60 * 60 * 1000,
-        severity: criticalFailureCount > 0 || pendingOlderThanFiveMinutes > 0 ? 'error' : 'warning',
-      },
-    );
-  }
 
   return {
     success: true,

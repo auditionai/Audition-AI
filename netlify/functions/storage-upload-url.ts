@@ -2,7 +2,7 @@ import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { Handler } from '@netlify/functions';
 import { randomUUID } from 'node:crypto';
-import { getServiceRoleClient, requireAuthenticatedUser } from './_supabase';
+import { getServiceRoleClient, requireAdminUser, requireAuthenticatedUser } from './_supabase';
 
 const headers = {
   'Content-Type': 'application/json',
@@ -24,10 +24,14 @@ const R2_ACCESS_KEY_ID = getEnv('R2_ACCESS_KEY_ID', 'VITE_R2_ACCESS_KEY_ID');
 const R2_SECRET_ACCESS_KEY = getEnv('R2_SECRET_ACCESS_KEY', 'VITE_R2_SECRET_ACCESS_KEY');
 const R2_BUCKET_NAME = getEnv('R2_BUCKET_NAME', 'VITE_R2_BUCKET_NAME');
 const R2_PUBLIC_URL = getEnv('R2_PUBLIC_URL', 'VITE_R2_PUBLIC_URL').replace(/\/+$/, '');
+const R2_VIDEO_BUCKET_NAME = getEnv('R2_VIDEO_BUCKET_NAME');
+const R2_VIDEO_PUBLIC_URL = getEnv('R2_VIDEO_PUBLIC_URL').replace(/\/+$/, '');
 const SUPABASE_STORAGE_BUCKET = 'images';
 
 const isR2Configured = () =>
   Boolean(R2_ENDPOINT && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY && R2_BUCKET_NAME && R2_PUBLIC_URL);
+
+const isVideoLibraryFolder = (folder: string) => /^(video-templates|video-results)(?:\/|$)/.test(folder);
 
 let supabaseBucketReadyPromise: Promise<void> | null = null;
 
@@ -142,12 +146,24 @@ export const handler: Handler = async (event) => {
     }
 
     const requestedFolder = cleanSegment(String(body.folder || 'inputs')) || 'inputs';
+    const usesVideoLibrary = isVideoLibraryFolder(requestedFolder);
+    if (usesVideoLibrary) {
+      await requireAdminUser(event);
+      if (!contentType.startsWith('video/')) {
+        throw new Error('Video template/result storage only accepts video files.');
+      }
+      if (!R2_VIDEO_BUCKET_NAME || !R2_VIDEO_PUBLIC_URL) {
+        throw new Error('R2 video storage is not configured on the server.');
+      }
+    }
     // Keep videos in a dedicated top-level namespace so retention jobs can
     // never remove them together with temporary image inputs.
     const storageFolder = contentType.startsWith('video/')
       ? (requestedFolder === 'videos' || requestedFolder.startsWith('videos/') ? requestedFolder : `videos/${requestedFolder}`)
       : requestedFolder;
-    const key = `users/${user.id}/${storageFolder}/${Date.now()}-${randomUUID()}.${extensionForMime(contentType)}`;
+    const key = usesVideoLibrary
+      ? `${requestedFolder}/${Date.now()}-${randomUUID()}.${extensionForMime(contentType)}`
+      : `users/${user.id}/${storageFolder}/${Date.now()}-${randomUUID()}.${extensionForMime(contentType)}`;
 
     if (!isR2Configured()) {
       await ensureSupabaseStorageBucket();
@@ -173,8 +189,10 @@ export const handler: Handler = async (event) => {
     }
 
     const r2 = getR2Client();
+    const bucketName = usesVideoLibrary ? R2_VIDEO_BUCKET_NAME : R2_BUCKET_NAME;
+    const publicUrl = usesVideoLibrary ? R2_VIDEO_PUBLIC_URL : R2_PUBLIC_URL;
     const command = new PutObjectCommand({
-      Bucket: R2_BUCKET_NAME,
+      Bucket: bucketName,
       Key: key,
       ContentType: contentType,
     });
@@ -186,7 +204,7 @@ export const handler: Handler = async (event) => {
       body: JSON.stringify({
         provider: 'r2',
         uploadUrl,
-        publicUrl: `${R2_PUBLIC_URL}/${key}`,
+        publicUrl: `${publicUrl}/${key}`,
         expiresIn: 300,
       }),
     };

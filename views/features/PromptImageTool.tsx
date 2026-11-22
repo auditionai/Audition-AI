@@ -61,8 +61,8 @@ const GPT_REFERENCE_IMAGE_LIMIT = 5;
 const MAX_PROMPT_CHARACTERS = 10_000;
 const GPTI2_IMAGE_RESOLUTIONS = ['1K', '2K', '4K'];
 const GPTI2_NANO_RESOLUTIONS = ['1K', '2K', '4K'];
-const GPTI2_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'];
-const GPTI2_NANO_ASPECT_RATIOS = GPTI2_ASPECT_RATIOS.filter((ratio) => ratio !== '21:9');
+const GPTI2_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '2.35:1'];
+const GPTI2_NANO_ASPECT_RATIOS = GPTI2_ASPECT_RATIOS.filter((ratio) => ratio !== '2.35:1');
 const ASPECT_RATIOS = ['1:1', '9:16', '16:9', '3:4', '4:3', '2:3', '3:2'];
 const MODEL_TABS: Array<{
   tier: TstGenerationTier;
@@ -91,6 +91,12 @@ const MODEL_TABS: Array<{
     tier: 'gpt_sunburst', label: 'Sunburst', tag: 'MỚI', title: 'GPT Image 2.5 Sunburst',
     description: 'Dựng nhân vật 3D giàu chi tiết với chất liệu, gương mặt và ánh sáng điện ảnh nổi bật.', icon: Sparkles,
     accent: 'from-yellow-300 via-orange-500 to-red-500',
+  },
+  {
+    tier: 'gpt_26_flare', label: 'Flare 2.6', tag: 'MỚI', title: 'GPT Image 2.6 Flare', description: 'Bản mới nhanh nhất, bám sát mô tả và giữ chi tiết tốt hơn.', icon: Sparkles, accent: 'from-emerald-400 via-cyan-500 to-blue-500',
+  },
+  {
+    tier: 'gpt_26_sunburst', label: 'Sunburst 2.6', tag: 'MỚI', title: 'GPT Image 2.6 Sunburst', description: 'Bản 2.6 giàu ánh sáng và chi tiết cho hình ảnh nổi bật.', icon: Sparkles, accent: 'from-amber-300 via-pink-500 to-rose-600',
   },
   {
     tier: 'flash',
@@ -213,7 +219,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
   const isGommoSelected = selectedProvider === 'gommo';
   const pricingServerId = selectedProvider === 'gpti2' ? undefined : generationServerId;
   const selectedGommoModel = getGommoModelForAudition(gommoCatalog, selectedModelId);
-  const isGptImageTier = ['gpt', 'gpt_flare', 'gpt_sunburst'].includes(aiModel);
+  const isGptImageTier = ['gpt', 'gpt_flare', 'gpt_sunburst', 'gpt_26_flare', 'gpt_26_sunburst'].includes(aiModel);
   const tstReferenceImageLimit = isGptImageTier ? GPT_REFERENCE_IMAGE_LIMIT : DEFAULT_REFERENCE_IMAGE_LIMIT;
   const maxReferenceImages = isGommoSelected && Number(selectedGommoModel?.maxReferenceImages) > 0
     ? Number(selectedGommoModel?.maxReferenceImages)
@@ -486,7 +492,7 @@ export const PromptImageTool: React.FC<PromptImageToolProps> = ({ feature, onNav
       const queuedJobId = crypto.randomUUID();
       const modelLabel = getModelLabel(aiModel);
       const isGptPromptMode = aiModel === 'gpt';
-      const referenceLockPrompt = aiModel === 'gpt_flare' || aiModel === 'gpt_sunburst' ? GPT_IMAGE_25_REFERENCE_LOCK_PROMPT : '';
+      const referenceLockPrompt = ['gpt_flare', 'gpt_sunburst', 'gpt_26_flare', 'gpt_26_sunburst'].includes(aiModel) ? GPT_IMAGE_25_REFERENCE_LOCK_PROMPT : '';
       const effectivePrompt = `${referenceLockPrompt} ${prompt.trim()}`.trim();
       const queuePayload: PromptImageGenerateRecipePayload = {
         recipeType: 'prompt_image_generate_recipe_v1',

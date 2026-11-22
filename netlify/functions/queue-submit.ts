@@ -495,7 +495,7 @@ const resolveServerCostVcoin = async (
   // image-gpt-2. Prefer a model-specific row when present, otherwise inherit
   // the matching GPT Image 2 option without mutating existing pricing rows.
   const pricingModelIds = [modelId];
-  if (['image-gpt-2.5-flare', 'image-gpt-2.5-sunburst'].includes(modelId)) {
+  if (['image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'image-gpt-2.6-flare', 'image-gpt-2.6-sunburst'].includes(modelId)) {
     pricingModelIds.push('image-gpt-2');
   }
 
@@ -855,7 +855,7 @@ export const handler: Handler = async (event) => {
     });
     const routingConfig = await getGenerationProvider(admin, modelId, providerRouteKey);
     if (routingConfig.allowedModels && !routingConfig.allowedModels.includes(modelId)
-      && !(providerRouteKey !== 'video_generation' && providerRouteKey !== 'motion_control' && routingConfig.provider === 'gpti2' && ['image-gpt-2', 'gpt-image-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId))) {
+      && !(providerRouteKey !== 'video_generation' && providerRouteKey !== 'motion_control' && routingConfig.provider === 'gpti2' && ['image-gpt-2', 'gpt-image-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'image-gpt-2.6-flare', 'image-gpt-2.6-sunburst', 'gpt-image-2.6-flare', 'gpt-image-2.6-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId))) {
       return {
         statusCode: 400,
         headers,

@@ -89,6 +89,21 @@ export const getUserFriendlyErrorInfo = (
 
   const lower = cleanRaw.toLowerCase();
 
+  // Provider model identifiers are validated before the reference-image phase.
+  // Keep this ahead of generic media matching because `image` + `unsupported`
+  // would otherwise be presented as a corrupt reference file.
+  if (lower.includes('gpti2_model_unsupported') || lower.includes('gpti2_model_alias_missing')) {
+    return {
+      title: 'Mô hình AI đang được đồng bộ',
+      reason: 'Mô hình đã chọn chưa được worker GPTi2 nhận diện tại thời điểm gửi yêu cầu.',
+      resolution: 'Hệ thống đã hoàn Vcoin. Hãy thử lại sau khi đồng bộ hoàn tất hoặc chọn model khác.',
+      summary: 'Worker GPTi2 chưa nhận diện model đã chọn (Đã hoàn Vcoin).',
+      category: 'config',
+      isAdminNote: false,
+      rawMessage: cleanRaw,
+    };
+  }
+
   // 2. Admin manually stopped
   if (
     lower.includes('admin manually stopped') ||

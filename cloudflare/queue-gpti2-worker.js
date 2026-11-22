@@ -4,11 +4,18 @@ import {
 } from './_queue-shared.js';
 
 const GPTI2_PROVIDERS = new Set(['gpti2_image', 'gpti2_edit']);
-const GPTI2_MODELS = new Set(['gpt-image-2', 'image-gpt-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro']);
+const GPTI2_MODELS = new Set(['gpt-image-2', 'image-gpt-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'image-gpt-2.6-flare', 'image-gpt-2.6-sunburst', 'gpt-image-2.6-flare', 'gpt-image-2.6-sunburst', 'nano-banana-2', 'nano-banana-pro']);
+const GPTI2_MODEL_ALIASES = {
+  'image-gpt-2': 'gpt-image-2',
+  'image-gpt-2.5-flare': 'gpt-image-2.5-flare',
+  'image-gpt-2.5-sunburst': 'gpt-image-2.5-sunburst',
+  'image-gpt-2.6-flare': 'gpt-image-2.6-flare',
+  'image-gpt-2.6-sunburst': 'gpt-image-2.6-sunburst',
+};
 const GPTI2_SIZES = {
-  '1K': { '1:1': '1024x1024', '16:9': '1280x720', '9:16': '720x1280', '4:3': '1024x768', '3:4': '768x1024', '3:2': '1536x1024', '2:3': '1024x1536', '21:9': '1280x544' },
-  '2K': { '1:1': '1536x1536', '16:9': '2560x1440', '9:16': '1440x2560', '4:3': '2048x1536', '3:4': '1536x2048', '3:2': '2400x1600', '2:3': '1600x2400', '21:9': '2560x1088' },
-  '4K': { '1:1': '2048x2048', '16:9': '3840x2160', '9:16': '2160x3840', '4:3': '3200x2400', '3:4': '2400x3200', '3:2': '3360x2240', '2:3': '2240x3360', '21:9': '3840x1632' },
+  '1K': { '1:1': '1024x1024', '16:9': '1280x720', '9:16': '720x1280', '4:3': '1024x768', '3:4': '768x1024', '3:2': '1536x1024', '2:3': '1024x1536', '2.35:1': '1280x544', '21:9': '1280x544' },
+  '2K': { '1:1': '1536x1536', '16:9': '2560x1440', '9:16': '1440x2560', '4:3': '2048x1536', '3:4': '1536x2048', '3:2': '2400x1600', '2:3': '1600x2400', '2.35:1': '2560x1088', '21:9': '2560x1088' },
+  '4K': { '1:1': '2048x2048', '16:9': '3840x2160', '9:16': '2160x3840', '4:3': '3200x2400', '3:4': '2400x3200', '3:2': '3360x2240', '2:3': '2240x3360', '2.35:1': '3840x1632', '21:9': '3840x1632' },
 };
 const GPTI2_MAX_ATTEMPTS = 6;
 const isRetryableGpti2Error = (message) => /timeout|timed out|network|429|rate_limit|rate limit|service busy|temporarily unavailable|5\d\d|provider returned no image|endpoint returned no image/i.test(String(message || ''));
@@ -140,7 +147,8 @@ const persistGpti2Result = async (env, row, result) => {
 };
 
 const submitGpti2 = async (env, row, report) => {
-  const payload = payloadObject(row); const model = isDirectImageEdit(row) ? 'gpt-image-2' : modelOf(row);
+  const payload = payloadObject(row); const requestedModel = isDirectImageEdit(row) ? 'gpt-image-2' : modelOf(row);
+  const model = GPTI2_MODEL_ALIASES[requestedModel] || requestedModel;
   if (!GPTI2_MODELS.has(model)) throw new Error(`GPTI2_MODEL_UNSUPPORTED: ${model}`);
   const rawPrompt = String(payload.prompt || row.prompt || '').trim();
   if (!rawPrompt) throw new Error('GPTI2_ERROR: prompt is required');

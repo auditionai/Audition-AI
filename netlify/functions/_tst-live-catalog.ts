@@ -50,7 +50,17 @@ const normalizeQuality = (value?: string | null) => normalize(value);
 const normalizeDuration = (value?: string | null) => normalize(value);
 const normalizeServer = (value?: string | null) => normalize(value);
 const isFresh = (timestamp: number) => timestamp > 0 && Date.now() - timestamp < TST_LIVE_CATALOG_TTL_MS;
-const ASPECT_RATIO_ORDER = ['auto', '1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '5:4', '4:5', '21:9'];
+const ASPECT_RATIO_ORDER = ['auto', '1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '5:4', '4:5', '2.35:1', '21:9'];
+const TST_GPT_IMAGE_MODEL_ALIASES: Record<string, string> = {
+  'image-gpt-2.5-flare': 'gpt-image-2.5-flare',
+  'image-gpt-2.5-sunburst': 'gpt-image-2.5-sunburst',
+  'image-gpt-2.6-flare': 'gpt-image-2.6-flare',
+  'image-gpt-2.6-sunburst': 'gpt-image-2.6-sunburst',
+  'gpt-image-2.5-flare': 'image-gpt-2.5-flare',
+  'gpt-image-2.5-sunburst': 'image-gpt-2.5-sunburst',
+  'gpt-image-2.6-flare': 'image-gpt-2.6-flare',
+  'gpt-image-2.6-sunburst': 'image-gpt-2.6-sunburst',
+};
 const TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
   'seedance-2.0-fast': ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'],
   'seedance-2.0': ['16:9', '9:16', '4:3', '3:4', '1:1', '21:9'],
@@ -61,6 +71,12 @@ const TST_DOCS_VIDEO_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
 };
 const TST_DOCS_IMAGE_ASPECT_RATIO_FALLBACKS: Record<string, string[]> = {
   'image-gpt-2': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'],
+  'image-gpt-2.5-flare': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
+  'image-gpt-2.5-sunburst': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
+  'image-gpt-2.6-flare': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
+  'image-gpt-2.6-sunburst': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
+  'gpt-image-2.6-flare': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
+  'gpt-image-2.6-sunburst': ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
   'nano-banana-2': ['auto', '1:1', '4:3', '16:9', '9:16'],
   'nano-banana-pro': ['auto', '1:1', '4:3', '16:9', '21:9', '9:16', '3:4'],
 };
@@ -389,7 +405,7 @@ const findPricingMatch = (
   },
 ) => entries.find((entry) => {
   const isGptFastGenericEntry =
-    ['image-gpt-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst'].includes(normalize(modelId)) &&
+    ['image-gpt-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'image-gpt-2.6-flare', 'image-gpt-2.6-sunburst'].includes(normalize(modelId)) &&
     normalizeServer(entry.server) === 'fast' &&
     !normalizeResolution(entry.resolution) &&
     !normalizeQuality(entry.quality) &&
@@ -424,16 +440,18 @@ export const validateQueuePayloadAgainstLiveCatalog = async (
     getTstProviderPricing(),
     getServerAvailabilityConfig(),
   ]);
-  const modelId = normalize(String(queuePayload.model || queuePayload.modelId || ''));
+  const requestedModelId = normalize(String(queuePayload.model || queuePayload.modelId || ''));
 
-  if (!modelId) {
+  if (!requestedModelId) {
     throw new Error('INVALID_TST_CONFIG: Missing model id');
   }
 
-  const model = models.find((entry) => normalize(entry.model) === modelId);
+  const providerModelId = TST_GPT_IMAGE_MODEL_ALIASES[requestedModelId];
+  const model = models.find((entry) => normalize(entry.model) === requestedModelId || normalize(entry.model) === providerModelId);
   if (!model) {
-    throw new Error(`INVALID_TST_CONFIG: Model ${modelId} is not available on TST`);
+    throw new Error(`INVALID_TST_CONFIG: Model ${requestedModelId} is not available on TST`);
   }
+  const modelId = normalize(model.model);
 
   const expectedType =
     queueKind === 'image_generate' ? 'image' :

@@ -100,7 +100,7 @@ export const DanceVideoAdminWorkspace: React.FC = () => {
   const handleUploadResultVideo = async (job: any, file: File) => {
     setUploadingJobId(job.id);
     try {
-      const url = await uploadFileToR2(file, `dance-orders/${job.id}/result`);
+      const url = await uploadFileToR2(file, `video-results/${job.id}`);
       await updateJob(job, { resultVideoUrl: url, status: 'completed' });
     } catch (err: any) {
       alert('Lỗi tải video kết quả lên R2: ' + (err?.message || 'Không xác định'));
@@ -113,7 +113,7 @@ export const DanceVideoAdminWorkspace: React.FC = () => {
     if (!draft) return;
     setUploadingTemplateVideo(true);
     try {
-      const url = await uploadFileToR2(file, `dance-templates/${draft.id || crypto.randomUUID()}`);
+      const url = await uploadFileToR2(file, `video-templates/${draft.id || crypto.randomUUID()}`);
       setDraft((current: any) => ({ ...current, preview_video_url: url }));
     } catch (err: any) {
       alert('Lỗi tải video mẫu lên R2: ' + (err?.message || 'Không xác định'));

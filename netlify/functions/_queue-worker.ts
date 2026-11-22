@@ -364,7 +364,7 @@ const stripInternalQueueMeta = (payload: Record<string, unknown> | ImageGenerate
   Object.fromEntries(Object.entries(payload).filter(([key]) => !key.startsWith('__')));
 
 const isGptImageRecipePayload = (payload?: Partial<ImageGenerateRecipePayload> | null) =>
-  ['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(String(payload?.modelId || '').trim().toLowerCase());
+  ['image-gpt-2', 'gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'gpt-image-2.6-flare', 'gpt-image-2.6-sunburst'].includes(String(payload?.modelId || '').trim().toLowerCase());
 
 const sanitizeGptImageRecipePayload = (payload: ImageGenerateRecipePayload): ImageGenerateRecipePayload => {
   if (!isGptImageRecipePayload(payload)) {
@@ -1269,20 +1269,22 @@ const submitProviderJob = async (
 const applyLivePricingConfigToPayload = (
   queueKind: string,
   providerPayload: Record<string, unknown>,
-  validationResult?: { pricingMatch?: { config_key?: string } | null } | null,
+  validationResult?: { modelId?: string; pricingMatch?: { config_key?: string } | null } | null,
 ) => {
   const configKey = String(validationResult?.pricingMatch?.config_key || '').trim();
-  if (!configKey) {
+  const modelId = String(validationResult?.modelId || '').trim();
+  if (!configKey && !modelId) {
     return providerPayload;
   }
 
-  if (String(providerPayload.config_key || '').trim() === configKey) {
+  if (String(providerPayload.config_key || '').trim() === configKey && (!modelId || String(providerPayload.model || '').trim() === modelId)) {
     return providerPayload;
   }
 
   return {
     ...providerPayload,
-    config_key: configKey,
+    ...(configKey ? { config_key: configKey } : {}),
+    ...(modelId ? { model: modelId } : {}),
   };
 };
 

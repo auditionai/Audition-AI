@@ -69,8 +69,8 @@ import { getGommoModeForServerGroup, getGommoServerGroups, getPreferredGommoBasi
 type GenMode = 'single' | 'couple' | 'trio' | 'squad' | 'group5' | 'group6' | 'group7' | 'group8';
 type Stage = 'input' | 'submitting';
 const GPTI2_RESOLUTIONS = ['1K', '2K', '4K'];
-const GPTI2_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'];
-const GPTI2_NANO_ASPECT_RATIOS = GPTI2_ASPECT_RATIOS.filter((ratio) => ratio !== '21:9');
+const GPTI2_ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '2.35:1'];
+const GPTI2_NANO_ASPECT_RATIOS = GPTI2_ASPECT_RATIOS.filter((ratio) => ratio !== '2.35:1');
 
 const IMAGE_MODEL_OPTIONS: Array<{
   tier: TstGenerationTier;
@@ -96,6 +96,8 @@ const IMAGE_MODEL_OPTIONS: Array<{
   {
     tier: 'gpt_sunburst', label: 'Sunburst', tag: 'MỚI', title: 'GPT Image 2.5 Sunburst', description: 'Dựng nhân vật 3D giàu chi tiết với chất liệu, gương mặt và ánh sáng điện ảnh nổi bật.', icon: Sparkles, accent: 'from-yellow-300 via-orange-500 to-red-500',
   },
+  { tier: 'gpt_26_flare', label: 'Flare 2.6', tag: 'MỚI', title: 'GPT Image 2.6 Flare', description: 'Bản mới nhanh nhất, bám sát mô tả và giữ chi tiết tốt hơn.', icon: Sparkles, accent: 'from-emerald-400 via-cyan-500 to-blue-500' },
+  { tier: 'gpt_26_sunburst', label: 'Sunburst 2.6', tag: 'MỚI', title: 'GPT Image 2.6 Sunburst', description: 'Bản 2.6 giàu ánh sáng và chi tiết cho hình ảnh nổi bật.', icon: Sparkles, accent: 'from-amber-300 via-pink-500 to-rose-600' },
   {
     tier: 'flash',
     label: 'Flash',
@@ -301,7 +303,7 @@ export function WorkspaceImage() {
 
   const generationSpeedId = uiSpeedToTst(speed) || 'fast';
   const generationTier = aiModel;
-  const isGptImageTier = ['gpt', 'gpt_flare', 'gpt_sunburst'].includes(aiModel);
+  const isGptImageTier = ['gpt', 'gpt_flare', 'gpt_sunburst', 'gpt_26_flare', 'gpt_26_sunburst'].includes(aiModel);
   const selectedModelId = getGenerationModelId(aiModel);
   const providerRouteKey = getImageProviderRouteKey(MODE_TO_CHARACTER_COUNT[activeMode]);
   useEffect(() => {
@@ -373,7 +375,7 @@ export function WorkspaceImage() {
   const isTierAvailable = (tier: TstGenerationTier) => {
     const modelId = getGenerationModelId(tier);
     if (!isModelAllowedForFeature(providerConfig, providerRouteKey, modelId)) return false;
-    if (resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gpti2') return ['image-gpt-2', 'gpt-image-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId);
+    if (resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gpti2') return ['image-gpt-2', 'gpt-image-2', 'image-gpt-2.5-flare', 'image-gpt-2.5-sunburst', 'image-gpt-2.6-flare', 'image-gpt-2.6-sunburst', 'nano-banana-2', 'nano-banana-pro'].includes(modelId);
     return resolveProviderForModel(providerConfig, modelId, providerRouteKey) === 'gommo'
       ? isGommoCatalogModelAvailable(getGommoModelForAudition(gommoCatalog, modelId))
       : pricingEntries.some((entry) => entry.model.trim().toLowerCase() === modelId)
@@ -388,6 +390,8 @@ export function WorkspaceImage() {
     gpt: isGptAvailable,
     gpt_flare: isTierAvailable('gpt_flare'),
     gpt_sunburst: isTierAvailable('gpt_sunburst'),
+    gpt_26_flare: isTierAvailable('gpt_26_flare'),
+    gpt_26_sunburst: isTierAvailable('gpt_26_sunburst'),
   };
   useEffect(() => {
     if (!isModelAllowedForFeature(providerConfig, providerRouteKey, getGenerationModelId(aiModel))) {
@@ -1292,7 +1296,7 @@ export function WorkspaceImage() {
         <div className="space-y-2">
           <h3 className="text-xs font-semibold text-gray-400 dark:text-zinc-500 uppercase tracking-wider ml-1">Model AI</h3>
           <div className="grid gap-3 sm:grid-cols-2">
-            {IMAGE_MODEL_OPTIONS.map((model) => {
+            {IMAGE_MODEL_OPTIONS.filter((model) => imageModelAvailability[model.tier]).map((model) => {
               const Icon = model.icon;
               const available = imageModelAvailability[model.tier];
               const selected = aiModel === model.tier;
